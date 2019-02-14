@@ -68,6 +68,46 @@ bool InlineHook(void *pHookAddr, void (*onCallBack)(struct user_pt_regs *))
     return true;
 }
 
+
+/**
+ * 一次hook 废弃！
+ * @param  pHookAddr     要hook的地址
+ * @param  onCallBack    要插入的回调函数
+ * @return               inlinehook是否设置成功（已经设置过，重复设置返回false）
+ */
+bool InlineHookOnce(void *pHookAddr, void (*onCallBack)(struct user_pt_regs *))
+{
+    bool bRet = false;
+    LOGI("InlineHook");
+
+    if(pHookAddr == NULL || onCallBack == NULL)
+    {
+        return bRet;
+    }
+    //TODO:检测该hook是否已经调用过，已使用则删除旧hook记录。未使用则防止重复hook
+    if(gs_vecInlineHookInfo.count(pHookAddr)==1)
+    {
+        return bRet;
+    }
+
+
+    INLINE_HOOK_INFO* pstInlineHook = new INLINE_HOOK_INFO();
+    pstInlineHook->pHookAddr = pHookAddr;
+    pstInlineHook->onCallBack = onCallBack;
+
+    if(HookArmOnce(pstInlineHook) == false)
+    {
+        LOGI("HookArm fail.");
+        delete pstInlineHook;
+        return bRet;
+    }
+
+
+    gs_vecInlineHookInfo[pHookAddr]=pstInlineHook;
+    return true;
+}
+
+
 /**
  * 对外接口，用于取消inline hook  该接口禁止在回调中使用
  * @param  pHookAddr 要取消inline hook的位置
@@ -173,11 +213,29 @@ void* DoInLineHook(std::string module, unsigned long off,void (*onCallBack)(stru
 
     return (void*)uiHookAddr;
 }
+//直接使用VA hook
+void* DoInLineHook(unsigned long off,void (*onCallBack)(struct user_pt_regs *))
+{
+    uint64_t uiHookAddr = off; //真实Hook的内存地址
+    InlineHook((void*)(uiHookAddr), onCallBack);
+
+    return (void*)uiHookAddr;
+}
 
 //一次hook
-void DoInLineHookOnce(std::string module, unsigned long off,void (*onCallBack)(struct user_pt_regs *))
+//已废弃，原因：返回时必须使用寄存器跳转，无法直接为pc赋值或使用地址跳转，必须占用一个寄存器，导致调回时无代码可复原寄存器
+void* DoInLineHookOnce(std::string module, unsigned long off,void (*onCallBack)(struct user_pt_regs *))
 {
+    void* pModuleBaseAddr = GetModuleBaseAddr(-1, const_cast<char *>(module.c_str())); //目标so的名称
+    if(pModuleBaseAddr == 0)
+    {
+        LOGI("get module base error.");
+        return 0;
+    }
+    uint64_t uiHookAddr = (uint64_t)pModuleBaseAddr + off; //真实Hook的内存地址
+    InlineHookOnce((void*)(uiHookAddr), onCallBack);
 
+    return (void*)uiHookAddr;
 }
 
 void DeleteInLineHook(void *pHookAddr)

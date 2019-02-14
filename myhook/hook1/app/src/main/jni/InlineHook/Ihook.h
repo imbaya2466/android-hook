@@ -67,6 +67,8 @@ bool RebuildHookTarget(INLINE_HOOK_INFO* pstInlineHook);
 
 extern bool HookArm(INLINE_HOOK_INFO* pstInlineHook);
 
+extern bool HookArmOnce(INLINE_HOOK_INFO* pstInlineHook);
+
 void deleteHookArm(INLINE_HOOK_INFO* pstInlineHook);
 
 #endif

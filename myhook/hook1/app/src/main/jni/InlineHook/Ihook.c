@@ -278,7 +278,7 @@ bool BuildOldFunction(INLINE_HOOK_INFO* pstInlineHook)
             break;
         }
         LOGI("LIVE3.3");
-        
+
         //8个bytes存放原来的opcodes，另外8个bytes存放跳转回hook点下面的跳转指令
         void * pNewEntryForOldFunction = malloc(200);
         if(pNewEntryForOldFunction == NULL)
@@ -290,14 +290,15 @@ bool BuildOldFunction(INLINE_HOOK_INFO* pstInlineHook)
 
         pstInlineHook->pNewEntryForOldFunction = pNewEntryForOldFunction;
         LOGI("%x",pNewEntryForOldFunction);
-        
+
         if(ChangePageProperty(pNewEntryForOldFunction, 200) == false)
         {
             LOGI("change new entry page property fail.");
             break;
         }
         LOGI("LIVE3.5");
-        
+
+        //修复指令
         fixLength = fixPCOpcodeArm(fixOpcodes, pstInlineHook); //把第三部分的起始地址传过去
         memcpy(pNewEntryForOldFunction, fixOpcodes, fixLength);
         LOGI("LIVE3.6");
@@ -431,6 +432,106 @@ bool HookArm(INLINE_HOOK_INFO* pstInlineHook)
 
     return bRet;
 }
+
+/**
+ * 构造被inline hook的函数头，还原原函数头+增加跳转
+ * 仅是拷贝跳转即可，同时填充stub shellcode中的oldfunction地址及hookinfo里面的old函数地址
+ * 这个实现没有指令修复功能，即是HOOK的位置指令不能涉及PC等需要重定向指令
+ * @param  pstInlineHook inlinehook信息
+ * @return               原函数构造是否成功
+ */
+bool BuildOldFunctionOnce(INLINE_HOOK_INFO* pstInlineHook)
+{
+
+    *(pstInlineHook->ppOldFuncAddr) = pstInlineHook->pHookAddr;
+
+    return true;
+}
+
+/**
+ * ARM下的inlinehookOnce
+ * @param  pstInlineHook inlinehook信息
+ * @return               inlinehook是否设置成功
+ */
+ //废弃
+bool HookArmOnce(INLINE_HOOK_INFO* pstInlineHook)
+{
+    bool bRet = false;
+    LOGI("HookArmOnce()");
+
+
+
+
+    while(1)
+    {
+        //LOGI("pstInlineHook is null 1.");
+        if(pstInlineHook == NULL)
+        {
+            LOGI("pstInlineHook is null.");
+            break;
+        }
+        LOGI("LIVE1");
+
+        //LOGI("Init Arm HookInfo fail 1.");
+        //第零步，设置ARM下inline hook的基础信息
+        if(InitArmHookInfo(pstInlineHook) == false) //备份指令到结构体
+        {
+            LOGI("Init Arm HookInfo fail.");
+            break;
+        }
+        LOGI("LIVE2");
+
+        //LOGI("BuildStub fail 1.");
+        //第二步，构造stub，功能是保存寄存器状态，同时跳转到目标函数，然后跳转回原函数
+        //需要目标地址，返回stub地址，同时还有old指针给后续填充
+        if(BuildStub(pstInlineHook) == false) //stub代码分配，填充
+        {
+            LOGI("BuildStub fail.");
+            break;
+        }
+        LOGI("LIVE3");
+
+        //LOGI("BuildOldFunction fail 1.");
+        //第四步，负责重构原函数头，功能是修复指令，构造跳转回到原地址下
+        //需要原函数地址
+
+        if(BuildOldFunctionOnce(pstInlineHook) == false) //构建旧的代码模块并修复
+        {
+            LOGI("BuildOldFunction fail.");
+            break;
+        }
+        LOGI("LIVE4");
+
+        //LOGI("RebuildHookAddress fail 1.");
+        //第一步，负责重写原函数头，功能是实现inline hook的最后一步，改写跳转
+        //需要cacheflush，防止崩溃
+        if(RebuildHookTarget(pstInlineHook) == false) //更改hook点跳转
+        {
+            LOGI("RebuildHookAddress fail.");
+            break;
+        }
+        LOGI("LIVE5");
+
+        bRet = true;
+        break;
+    }
+    LOGI("LIVE6");
+
+    return bRet;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 /**
  * 在要HOOK的位置，取消跳转，恢复原内容
  * @param  pstInlineHook inlinehook信息
